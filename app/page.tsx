@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Script from 'next/script';
 
 // Image data - Images from public folder
@@ -240,6 +240,204 @@ export default function Home() {
         }
       };
 
+      // 1. DevTools Detection
+      const detectDevTools = () => {
+        const threshold = 160;
+        const widthThreshold = window.outerWidth - window.innerWidth > threshold;
+        const heightThreshold = window.outerHeight - window.innerHeight > threshold;
+
+        if (widthThreshold || heightThreshold) {
+          console.error('========================================');
+          console.error('🔧 DEVTOOLS DETECTED 🔧');
+          console.error('========================================');
+          console.error('Email:', userEmail);
+          console.error('IP Address:', userIPAddress);
+          console.error('Time:', new Date().toLocaleString());
+          console.error('WARNING: Developer tools are open - security violation!');
+          console.error('========================================');
+
+          instantBlock();
+        }
+      };
+
+      // 2. Screen Recording Detection
+      const detectScreenRecording = async () => {
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const hasVideoInput = devices.some(device => device.kind === 'videoinput');
+
+          if (hasVideoInput) {
+            // Check if screen capture is active
+            if (navigator.mediaDevices.getDisplayMedia) {
+              console.warn('Screen capture capability detected');
+            }
+          }
+        } catch (error) {
+          // Silently fail if permissions denied
+        }
+      };
+
+      // 3. DOM Mutation Protection
+      const protectDOM = () => {
+        const observer = new MutationObserver((mutations) => {
+          mutations.forEach((mutation) => {
+            mutation.removedNodes.forEach((node) => {
+              if (node === overlay || node === protectionOverlay) {
+                console.error('🚨 TAMPERING DETECTED: Protection overlay removed!');
+                console.error('Email:', userEmail, 'IP:', userIPAddress);
+
+                // Re-create the overlay immediately
+                if (node === overlay) {
+                  createOverlay();
+                } else if (node === protectionOverlay) {
+                  createProtectionOverlay();
+                }
+                instantBlock();
+              }
+            });
+          });
+        });
+
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true
+        });
+      };
+
+      // 4. Mobile Screenshot Protection
+      const protectMobileScreenshots = () => {
+        let volumePressed = false;
+        let powerPressed = false;
+
+        // Detect volume + power button combination (common screenshot method)
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'VolumeDown' || e.key === 'VolumeUp') {
+            volumePressed = true;
+          }
+          if (e.key === 'Power') {
+            powerPressed = true;
+          }
+
+          if (volumePressed && powerPressed) {
+            console.error('🚨 MOBILE SCREENSHOT ATTEMPT DETECTED 🚨');
+            console.error('Email:', userEmail, 'IP:', userIPAddress);
+            instantBlock();
+          }
+        });
+
+        document.addEventListener('keyup', (e) => {
+          if (e.key === 'VolumeDown' || e.key === 'VolumeUp') {
+            volumePressed = false;
+          }
+          if (e.key === 'Power') {
+            powerPressed = false;
+          }
+        });
+
+        // Mobile-specific touch detection
+        let touchStartTime = 0;
+        document.addEventListener('touchstart', () => {
+          touchStartTime = Date.now();
+        });
+
+        document.addEventListener('touchend', () => {
+          const touchDuration = Date.now() - touchStartTime;
+          // Suspicious if very short touch (might be screenshot gesture)
+          if (touchDuration < 100) {
+            console.warn('Suspicious touch gesture detected');
+          }
+        });
+      };
+
+      // 5. Fullscreen Monitoring
+      const monitorFullscreen = () => {
+        document.addEventListener('fullscreenchange', () => {
+          if (document.fullscreen) {
+            console.error('========================================');
+            console.error('📺 FULLSCREEN MODE DETECTED 📺');
+            console.error('========================================');
+            console.error('Email:', userEmail);
+            console.error('IP Address:', userIPAddress);
+            console.error('Time:', new Date().toLocaleString());
+            console.error('Fullscreen mode activated - potential recording attempt');
+            console.error('========================================');
+
+            showExtensionProtection();
+          }
+        });
+      };
+
+      // 6. Clipboard Protection
+      const protectClipboard = () => {
+        document.addEventListener('copy', (e) => {
+          e.preventDefault();
+          e.clipboardData?.setData('text/plain', '');
+
+          console.error('========================================');
+          console.error('📋 CLIPBOARD COPY ATTEMPT BLOCKED 📋');
+          console.error('========================================');
+          console.error('Email:', userEmail);
+          console.error('IP Address:', userIPAddress);
+          console.error('Time:', new Date().toLocaleString());
+          console.error('========================================');
+
+          instantBlock();
+        });
+
+        document.addEventListener('cut', (e) => {
+          e.preventDefault();
+          instantBlock();
+        });
+
+        // Clear clipboard periodically
+        setInterval(() => {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText('').catch(() => {});
+          }
+        }, 5000);
+      };
+
+      // 7. Network Inspector Detection
+      let imageRequestCount = 0;
+      const originalFetch = window.fetch;
+      window.fetch = function(...args) {
+        const url = args[0]?.toString() || '';
+        if (url.includes('.jpg') || url.includes('.png') || url.includes('.jpeg')) {
+          imageRequestCount++;
+          if (imageRequestCount > 10) {
+            console.error('🚨 BULK IMAGE DOWNLOAD DETECTED 🚨');
+            console.error('Email:', userEmail, 'IP:', userIPAddress);
+            showExtensionProtection();
+          }
+        }
+        return originalFetch.apply(this, args);
+      };
+
+      // 8. Random Disruption System
+      const startRandomDisruption = () => {
+        setInterval(() => {
+          // Random chance to flash warning (5% chance every 10 seconds)
+          if (Math.random() < 0.05) {
+            const protOverlay = createProtectionOverlay();
+            if (protOverlay) {
+              protOverlay.style.display = 'flex';
+              setTimeout(() => {
+                if (protOverlay) protOverlay.style.display = 'none';
+              }, 500); // Flash for 500ms
+            }
+          }
+        }, 10000);
+
+        // Random watermark position changes
+        setInterval(() => {
+          const watermarks = document.querySelectorAll('[style*="PROTECTED"]');
+          watermarks.forEach((wm) => {
+            const randomRotation = -45 + (Math.random() * 10 - 5);
+            (wm as HTMLElement).style.transform = `translateX(-50%) rotate(${randomRotation}deg)`;
+          });
+        }, 3000);
+      };
+
       const startUltraMonitoring = () => {
         setInterval(monitorFocus, 1);
         setInterval(attachMaximumHandlers, 100);
@@ -284,6 +482,19 @@ export default function Home() {
         attachMaximumHandlers();
         startUltraMonitoring();
 
+        // Initialize all protection systems
+        protectDOM();
+        protectClipboard();
+        protectMobileScreenshots();
+        monitorFullscreen();
+        startRandomDisruption();
+
+        // DevTools detection (check every 1 second)
+        setInterval(detectDevTools, 1000);
+
+        // Screen recording detection (check every 5 seconds)
+        setInterval(detectScreenRecording, 5000);
+
         document.addEventListener('visibilitychange', () => {
           if (document.hidden) instantBlock();
         });
@@ -301,6 +512,24 @@ export default function Home() {
           e.preventDefault();
           instantBlock();
         });
+
+        // Window resize detection (DevTools opening)
+        window.addEventListener('resize', detectDevTools);
+
+        // Console detection
+        const consoleDetection = () => {
+          const element = new Image();
+          Object.defineProperty(element, 'id', {
+            get: function () {
+              console.error('🔧 CONSOLE MANIPULATION DETECTED 🔧');
+              console.error('Email:', userEmail, 'IP:', userIPAddress);
+              instantBlock();
+              return 'protected';
+            }
+          });
+          console.log(element);
+        };
+        consoleDetection();
       };
 
       initMaxAggression();
@@ -675,6 +904,8 @@ export default function Home() {
               <p className="page-subtitle">
                 Click any image to view. Screenshot protection is enabled.
               </p>
+
+         
             </div>
 
             <div className="image-grid">
