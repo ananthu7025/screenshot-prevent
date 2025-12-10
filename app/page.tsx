@@ -47,10 +47,37 @@ export default function Home() {
   };
 
   const initializeProtection = (userEmail: string, userIPAddress: string) => {
-    // Ultra-aggressive Win+Shift+S / PrintScreen blocker
+    // Ultra-aggressive Win+Shift+S / PrintScreen blocker + Extension Protection
     (function () {
       let overlay: HTMLDivElement | null = null;
       let isBlocked = false;
+      let protectionOverlay: HTMLDivElement | null = null;
+
+      // Create a permanent protection overlay that appears on suspicious activity
+      const createProtectionOverlay = () => {
+        if (protectionOverlay) return protectionOverlay;
+
+        protectionOverlay = document.createElement('div');
+        protectionOverlay.style.cssText =
+          'position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; background: black !important; color: white !important; z-index: 2147483646 !important; display: none !important; align-items: center !important; justify-content: center !important; font-family: Arial, sans-serif !important; font-size: 24px !important; font-weight: bold !important; text-align: center !important; pointer-events: none !important;';
+
+        const timestamp = new Date().toLocaleString();
+        protectionOverlay.innerHTML = `
+          <div style="padding: 40px;">
+            <div style="font-size: 60px; margin-bottom: 20px;">⚠️</div>
+            <div style="color: #ff4444; margin-bottom: 30px;">CONTENT PROTECTION ACTIVE</div>
+            <div style="font-size: 18px; color: #ff4444; border: 2px solid #ff4444; padding: 20px; border-radius: 10px; display: inline-block; background: rgba(255, 68, 68, 0.1);">
+              <div style="margin-bottom: 10px;">📧 Email: ${userEmail}</div>
+              <div style="margin-bottom: 10px;">🌐 IP Address: ${userIPAddress}</div>
+              <div>⏰ Recorded: ${timestamp}</div>
+            </div>
+            <div style="font-size: 14px; margin-top: 20px; color: #ccc;">Screenshot attempts are being monitored</div>
+          </div>
+        `;
+
+        document.body.appendChild(protectionOverlay);
+        return protectionOverlay;
+      };
 
       const createOverlay = () => {
         if (overlay) return overlay;
@@ -183,6 +210,36 @@ export default function Home() {
         lastFocusTime = now;
       };
 
+      // Extension screenshot detection
+      const showExtensionProtection = () => {
+        const protOverlay = createProtectionOverlay();
+        if (protOverlay) {
+          protOverlay.style.display = 'flex';
+
+          // Hide all content
+          const mainContent = document.querySelectorAll('.image-grid, .modal-overlay, .protected-image');
+          mainContent.forEach((el) => {
+            (el as HTMLElement).style.visibility = 'hidden';
+          });
+
+          console.error('========================================');
+          console.error('🚨 EXTENSION SCREENSHOT DETECTED 🚨');
+          console.error('========================================');
+          console.error('Email:', userEmail);
+          console.error('IP Address:', userIPAddress);
+          console.error('Time:', new Date().toLocaleString());
+          console.error('========================================');
+
+          // Show for 3 seconds then hide
+          setTimeout(() => {
+            if (protOverlay) protOverlay.style.display = 'none';
+            mainContent.forEach((el) => {
+              (el as HTMLElement).style.visibility = 'visible';
+            });
+          }, 3000);
+        }
+      };
+
       const startUltraMonitoring = () => {
         setInterval(monitorFocus, 1);
         setInterval(attachMaximumHandlers, 100);
@@ -192,9 +249,34 @@ export default function Home() {
             instantBlock();
           }
           if (document.hidden) {
-            instantBlock();
+            showExtensionProtection();
           }
         }, 10);
+
+        // Monitor for visibility changes (extensions often trigger this)
+        let visibilityChangeCount = 0;
+        const visibilityHandler = () => {
+          if (document.hidden) {
+            visibilityChangeCount++;
+            if (visibilityChangeCount > 2) {
+              showExtensionProtection();
+            }
+          }
+        };
+        document.addEventListener('visibilitychange', visibilityHandler);
+
+        // Monitor for suspicious browser extension behavior
+        let lastMouseMove = Date.now();
+        document.addEventListener('mousemove', () => {
+          lastMouseMove = Date.now();
+        });
+
+        // If no mouse movement but visibility changes, likely extension screenshot
+        setInterval(() => {
+          if (document.hidden && Date.now() - lastMouseMove > 2000) {
+            showExtensionProtection();
+          }
+        }, 500);
       };
 
       const initMaxAggression = () => {
@@ -376,6 +458,55 @@ export default function Home() {
           user-select: none;
           -webkit-user-drag: none;
           pointer-events: none;
+          position: relative;
+        }
+
+        .protected-image::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: transparent;
+          z-index: 10;
+          pointer-events: none;
+        }
+
+        /* Watermark overlay for screenshot protection */
+        .modal-body::after {
+          content: '📧 ${email || 'Protected'} • 🌐 IP Logged • ⏰ ' attr(data-time);
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%) rotate(-45deg);
+          font-size: 48px;
+          font-weight: bold;
+          color: rgba(255, 68, 68, 0.3);
+          z-index: 9999;
+          pointer-events: none;
+          white-space: nowrap;
+          text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+          display: none;
+        }
+
+        @media print {
+          .protected-image,
+          .image-grid,
+          .modal-overlay {
+            display: none !important;
+          }
+
+          body::before {
+            content: 'SCREENSHOT PROHIBITED - Email: ${email} - IP Logged';
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            color: red;
+            font-weight: bold;
+          }
         }
 
         .page-header {
@@ -572,12 +703,53 @@ export default function Home() {
                       Close ✕
                     </button>
                   </div>
-                  <div className="modal-body">
+                  <div className="modal-body" style={{ position: 'relative' }}>
                     <img
                       src={selectedImage.url}
                       alt={selectedImage.title}
                       className="protected-image"
                     />
+                    {/* Invisible watermark overlay that appears in screenshots */}
+                    <div
+                      style={{
+                        position: 'fixed',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%) rotate(-45deg)',
+                        fontSize: '36px',
+                        fontWeight: 'bold',
+                        color: 'rgba(255, 68, 68, 0.15)',
+                        zIndex: 10000,
+                        pointerEvents: 'none',
+                        whiteSpace: 'nowrap',
+                        textShadow: '2px 2px 8px rgba(0, 0, 0, 0.3)',
+                        mixBlendMode: 'multiply',
+                        userSelect: 'none',
+                      }}
+                    >
+                      📧 {email} • 🌐 {userIP} • ⏰ {new Date().toLocaleString()}
+                    </div>
+                    {/* Multiple diagonal watermarks */}
+                    {[0, 1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        style={{
+                          position: 'fixed',
+                          top: `${25 * (i + 1)}%`,
+                          left: '50%',
+                          transform: 'translateX(-50%) rotate(-45deg)',
+                          fontSize: '24px',
+                          fontWeight: 'bold',
+                          color: 'rgba(255, 68, 68, 0.1)',
+                          zIndex: 10000,
+                          pointerEvents: 'none',
+                          whiteSpace: 'nowrap',
+                          userSelect: 'none',
+                        }}
+                      >
+                        PROTECTED • {email.split('@')[0]}
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
